@@ -438,39 +438,7 @@
       opacity: 0.9;
     }
 
-    /* Drag & Drop to Copy Shifts */
-    .shift-chip[draggable="true"] {
-      cursor: grab;
-      user-select: none;
-      position: relative;
-    }
-
-    .shift-chip[draggable="true"]:active {
-      cursor: grabbing;
-    }
-
-    .shift-chip.is-dragging {
-      opacity: 0.45;
-      transform: scale(0.96);
-      box-shadow: 0 8px 16px rgba(0,0,0,0.15);
-      border: 2px dashed var(--primary);
-    }
-
-    .drag-handle {
-      font-size: 0.85rem;
-      opacity: 0.55;
-      cursor: grab;
-      line-height: 1;
-      padding: 0 2px;
-      border-radius: 2px;
-      transition: opacity 0.15s ease;
-    }
-
-    .shift-chip:hover .drag-handle {
-      opacity: 1;
-      color: var(--primary);
-    }
-
+    /* Shift Chip Action Buttons (Copy Next Day & Repeat for Week) */
     .shift-chip-actions {
       display: flex;
       align-items: center;
@@ -487,7 +455,7 @@
       border-radius: 3px;
       font-size: 0.68rem;
       font-weight: 700;
-      padding: 1px 4px;
+      padding: 1px 5px;
       cursor: pointer;
       color: var(--gray-700);
       line-height: 1.2;
@@ -498,20 +466,6 @@
       background: var(--primary);
       color: #ffffff;
       border-color: var(--primary);
-    }
-
-    .shift-cell.drag-target-highlight {
-      background-color: #f0f7ff !important;
-      outline: 2px dashed #93c5fd;
-      outline-offset: -2px;
-    }
-
-    .shift-cell.drag-hover-over {
-      background-color: #dbeafe !important;
-      outline: 2px solid var(--primary) !important;
-      outline-offset: -2px;
-      transform: scale(1.02);
-      transition: transform 0.08s ease;
     }
 
     /* Total Hours Column */
@@ -951,7 +905,7 @@
     <!-- Quick Tip Banner for Manager -->
     <div style="margin-bottom: 12px; font-size: 0.84rem; color: var(--gray-700); display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; background: #ffffff; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--gray-200); box-shadow: var(--shadow-sm);">
       <span>
-        💡 <strong>Quick Schedule Tip:</strong> Click &amp; drag <span style="font-weight:700; color:var(--primary);">⠿ any shift</span> to another day to copy it instantly, or use <strong>⏩ Week</strong> to schedule that employee for the same shift all week.
+        💡 <strong>Quick Schedule Tip:</strong> Click <strong>→ Next</strong> on any shift to copy it to the following day, or use <strong>⏩ Week</strong> to schedule that employee for the same shift across the entire week.
       </span>
     </div>
 
@@ -1323,9 +1277,6 @@
       // Render Desktop Schedule Table
       renderDesktopTable(days, schedule);
 
-      // Attach Drag & Drop Listeners
-      attachDragAndDropListeners();
-
       // Render Mobile Schedule
       renderMobileSchedule(days, schedule);
 
@@ -1395,15 +1346,9 @@
 
           chipContent = `
             <div class="shift-chip type-${shift.type}" 
-                 draggable="true" 
-                 data-empid="${emp.id}" 
-                 data-day="${dayIdx}"
-                 title="Click and drag to copy to another day. Click to edit.">
+                 title="Click to edit shift">
               <div class="shift-chip-title">
-                <span style="display: flex; align-items: center; gap: 4px;">
-                  <span class="drag-handle" title="Click and drag to copy shift">⠿</span>
-                  <span>${badgeTitle}</span>
-                </span>
+                <span>${badgeTitle}</span>
                 ${isOff ? '' : `<span class="shift-chip-hours">${hours}h</span>`}
               </div>
               <div class="shift-chip-time">${timeLabel}</div>
@@ -1416,10 +1361,7 @@
           `;
 
           empHtml += `
-            <td class="shift-cell" 
-                data-empid="${emp.id}" 
-                data-day="${dayIdx}"
-                onclick="handleCellClick(event, '${emp.id}', ${dayIdx})">
+            <td class="shift-cell" onclick="openShiftModal('${emp.id}', ${dayIdx})">
               ${chipContent}
             </td>
           `;
@@ -1754,108 +1696,8 @@
     }
 
     /* ==========================================================================
-       6b. CLICK & DRAG TO COPY SHIFTS + QUICK COPY UTILITIES
+       6b. QUICK COPY & REPEAT SHIFT UTILITIES
        ========================================================================== */
-    let justDragged = false;
-    let draggedShiftData = null;
-
-    function handleCellClick(event, empId, dayIdx) {
-      if (justDragged) {
-        justDragged = false;
-        return;
-      }
-      openShiftModal(empId, dayIdx);
-    }
-
-    function attachDragAndDropListeners() {
-      const table = document.getElementById('desktop-schedule-table');
-      if (!table || table.dataset.dragInitialized) return;
-      table.dataset.dragInitialized = 'true';
-
-      // 1. Drag Start
-      table.addEventListener('dragstart', (e) => {
-        const chip = e.target.closest('.shift-chip');
-        if (!chip) return;
-
-        const empId = chip.dataset.empid;
-        const dayIdx = Number(chip.dataset.day);
-        const schedule = loadWeekSchedule(currentWeekFriday);
-        const shift = (schedule[empId] && schedule[empId][dayIdx]) || { type: 'off', hours: 0, start: '', end: '', breakMin: 0 };
-
-        draggedShiftData = {
-          empId,
-          dayIndex: dayIdx,
-          shift: JSON.parse(JSON.stringify(shift))
-        };
-
-        e.dataTransfer.setData('text/plain', JSON.stringify(draggedShiftData));
-        e.dataTransfer.effectAllowed = 'copy';
-
-        setTimeout(() => {
-          chip.classList.add('is-dragging');
-          // Highlight row targets for same employee
-          document.querySelectorAll(`.shift-cell[data-empid="${empId}"]`).forEach(cell => {
-            cell.classList.add('drag-target-highlight');
-          });
-        }, 0);
-      });
-
-      // 2. Drag End
-      table.addEventListener('dragend', (e) => {
-        const chip = e.target.closest('.shift-chip');
-        if (chip) chip.classList.remove('is-dragging');
-
-        document.querySelectorAll('.shift-cell').forEach(cell => {
-          cell.classList.remove('drag-target-highlight', 'drag-hover-over');
-        });
-
-        justDragged = true;
-        setTimeout(() => { justDragged = false; }, 250);
-      });
-
-      // 3. Drag Over
-      table.addEventListener('dragover', (e) => {
-        const cell = e.target.closest('.shift-cell');
-        if (!cell || !draggedShiftData) return;
-
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-        cell.classList.add('drag-hover-over');
-      });
-
-      // 4. Drag Leave
-      table.addEventListener('dragleave', (e) => {
-        const cell = e.target.closest('.shift-cell');
-        if (!cell) return;
-        cell.classList.remove('drag-hover-over');
-      });
-
-      // 5. Drop
-      table.addEventListener('drop', (e) => {
-        const cell = e.target.closest('.shift-cell');
-        if (!cell || !draggedShiftData) return;
-
-        e.preventDefault();
-        cell.classList.remove('drag-hover-over');
-
-        const targetEmpId = cell.dataset.empid;
-        const targetDayIndex = Number(cell.dataset.day);
-
-        const schedule = loadWeekSchedule(currentWeekFriday);
-        if (!schedule[targetEmpId]) schedule[targetEmpId] = [];
-
-        schedule[targetEmpId][targetDayIndex] = JSON.parse(JSON.stringify(draggedShiftData.shift));
-        saveWeekSchedule(currentWeekFriday, schedule);
-        renderApp();
-
-        const empName = employees.find(e => e.id === targetEmpId)?.name || 'Employee';
-        const shiftType = draggedShiftData.shift.type;
-        const shiftTitle = shiftType === 'off' ? 'Off' : (shiftType === 'custom' ? 'Custom' : PRESETS[shiftType]?.name);
-
-        showToast(`Copied ${shiftTitle} shift to ${DAY_NAMES[targetDayIndex]} for ${empName}!`, 'success');
-        draggedShiftData = null;
-      });
-    }
 
     // Copy Previous Day's shift for an employee
     function copyFromPreviousDay(empId, currentDayIndex) {
